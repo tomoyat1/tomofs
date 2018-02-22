@@ -6,9 +6,16 @@
 /* Super block number, in terms of sector_t's */
 #define TOMOFS_SB_BLK_NO 0
 #define TOMOFS_SB_MAGIC 0xdeadbeef
-#define TOMOFS_ROOTDIR_INODE_NO 0
+#define TOMOFS_ROOTDIR_INODE_NO 1
+#define TOMOFS_BLK_SIZE (1 << 13) /* (== 8KiB) */
 
-static const loff_t TOMOFS_MAXBYTES = 2 << 63;
+/* TODO: Limit this if we only allow direct blocks */
+static const loff_t TOMOFS_MAXBYTES = 1 << 63;
+
+enum tomofs_obj_type {
+	TOMOFS_INODE,
+	TOMOFS_SPACEMAP,
+};
 
 struct block_extent {
 	uintptr_t head;
@@ -17,20 +24,35 @@ struct block_extent {
 
 struct block_dev {
 	struct block_extent *block_map;
-	uint64_t blk_cnt;
-};
-
-struct tomofs_super_block {
-	int magic;
-	struct block_dev dev;
+	uint64_t block_cnt;
 };
 
 struct tomofs_inode {
-	int type; /* 0: file, 1: directory */
+	int flags;
+	mode_t mode;
 	unsigned long i_ino;
 	struct timespec i_atime;
 	struct timespec i_mtime;
 	struct timespec i_ctime;
+};
+
+/*
+ * Max number of inodes supported.
+ * Limited to the number of struct tomofs_inodes that fit in a 8KiB block.
+ * since we only use 1 block to store inodes.
+ * TODO: Dynamic inode allocation
+ */
+#define TOMOFS_MAXINODES ((1 << 13) / sizeof(struct tomofs_inode))
+
+struct tomofs_super_block {
+	int magic;
+	struct block_dev dev;
+	int next_open_inode;
+	/*
+         * TODO: Move to inode table.
+	 * Having this in the super block is BROKEN!
+	 */
+	struct tomofs_inode *inodes;
 };
 
 /*
