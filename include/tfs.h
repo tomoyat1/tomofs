@@ -18,6 +18,11 @@ enum tomofs_obj_type {
 	TOMOFS_SPACEMAP,
 };
 
+/*
+ * @head: ADDRESS
+ * @count: number of free blocks from ADDRESS
+ * TODO: Change this.
+ */
 struct block_extent {
 	uintptr_t head;
 	loff_t count;
@@ -36,6 +41,10 @@ struct tomofs_inode {
 	struct timespec i_atime;
 	struct timespec i_mtime;
 	struct timespec i_ctime;
+	union {
+		uint64_t file_size;
+		uint64_t child_count;
+	}
 };
 
 /*

@@ -23,7 +23,7 @@ struct block_extent *get_empty_block(struct super_block *sb,
 	} else {
 		found->head = block_map[0].head;
 		found->count = cnt;
-		block_map[0].head += cnt;
+		block_map[0].head += TOMOFS_BLK_SIZE * cnt;
 		block_map[0].count -= cnt;
 		mark_buffer_dirty(bh);
 		sync_dirty_buffer(bh);
