@@ -84,16 +84,16 @@ int tomofs_fill_super(struct super_block *sb, void *data, int silent)
 	root_inode->i_ino = TOMOFS_ROOTDIR_INODE_NO;
 	root_inode->i_op = &tomofs_i_op;
 	root_inode->i_fop = &tomofs_i_fop;
-	/* access time = create time = modify time = NOW! */
-	root_inode->i_atime = current_time(root_inode);
-	root_inode->i_ctime = current_time(root_inode);
-	root_inode->i_mtime = current_time(root_inode);
 	/*
 	 * hold tomofs specific rootdir inode representation for later
 	 * use. This data structure should hold block pointers and
 	 * other important metadata needed to retrive user data.
 	 */
 	root_inode->i_private = tomofs_get_inode(sb, TOMOFS_ROOTDIR_INODE_NO);
+	/* access time = create time = modify time = NOW! */
+	root_inode->i_atime = current_time(root_inode);
+	root_inode->i_ctime = current_time(root_inode);
+	root_inode->i_mtime = current_time(root_inode);
 	/* make dentry for rootdir from inode */
 	sb->s_root = d_make_root(root_inode);
 	if (!sb->s_root) {
@@ -110,16 +110,15 @@ release:
 static struct dentry *tomofs_mount(struct file_system_type *fs_type,
     int flags, const char *dev_name, void *data)
 {
-	/* TODO: Rename */
-	struct dentry *ret;
-	ret = mount_bdev(fs_type, flags, dev_name, data, tomofs_fill_super);
-	if (unlikely(IS_ERR(ret))) {
+	struct dentry *root_dentry;
+	root_dentry = mount_bdev(fs_type, flags, dev_name, data, tomofs_fill_super);
+	if (unlikely(IS_ERR(root_dentry))) {
 		printk("Error mounting tomofs");
 	} else {
 		printk("mounted tomofs");
 	}
 
-	return ret;
+	return root_dentry;
 }
 
 module_init(init_tomofs_fs)
