@@ -100,6 +100,7 @@ int tomofs_fill_super(struct super_block *sb, void *data, int silent)
 		ret = -ENOMEM;
 		goto release;
 	}
+	ret = 0;
 
 release:
 	brelse(bh);
