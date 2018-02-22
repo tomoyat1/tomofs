@@ -13,6 +13,8 @@ static struct dentry *tomofs_mount(struct file_system_type *fs_type,
 
 static void tomofs_kill_superblock(struct super_block *sb);
 
+static struct kmem_cache *tomofs_inode_cachep;
+
 static struct file_system_type tomofs_fs_type = {
 	.owner = THIS_MODULE,
 	.name = "tomofs",
@@ -23,6 +25,11 @@ static struct file_system_type tomofs_fs_type = {
 
 static int __init init_tomofs_fs(void)
 {
+	tomofs_inode_cachep = KMEM_CACHE(tomofs_inode, \
+	    (SLAB_RECLAIM_ACCOUNT| SLAB_MEM_SPREAD));
+	if (!tomofs_inode_cachep) {
+		return -ENOMEM;
+	}
 	return register_filesystem(&tomofs_fs_type);
 }
 
@@ -37,7 +44,6 @@ struct tomofs_inode *tomofs_get_inode(struct super_block *sb, uint64_t ino)
 	struct tomofs_super_block *tsb = (struct tomofs_super_block *)sb->s_fs_info;
 	struct buffer_head *bh;
 	struct tomofs_inode *inodes;
-	/* TODO: Change to BUG_ON() */
 	BUG_ON(!tsb);
 
 	bh = __bread(sb->s_bdev, tsb->inodes >> sb->s_blocksize_bits,
@@ -46,6 +52,9 @@ struct tomofs_inode *tomofs_get_inode(struct super_block *sb, uint64_t ino)
 	BUG_ON(!bh);
 
 	t_inode = &(inodes[ino]);
+	if (ino == 0) {
+		return NULL;
+	}
 	/* Checking for used flag */
 	if ((t_inode->flags & 0x1) != 0x1) {
 		return NULL;
@@ -53,22 +62,116 @@ struct tomofs_inode *tomofs_get_inode(struct super_block *sb, uint64_t ino)
 	return t_inode;
 }
 
-static int tomofs_create_fs_obj(struct inode *parent, struct dentry *dentry,
+static uint64_t tomofs_allocate_next_inode(struct super_block *sb)
+{
+	struct tomofs_super_block *tsb;
+	struct buffer_head *bh;
+	struct tomofs_inode *inodes;
+	uint64_t next_ino = 0;
+	uint64_t i;
+
+	tsb = (struct tomofs_super_block *)sb->s_fs_info;
+	bh = __bread(sb->s_bdev, tsb->inodes >> sb->s_blocksize_bits,
+	    TOMOFS_BLK_SIZE);
+	inodes = (struct tomofs_inode *)bh->b_data;
+	if (tsb->inode_count >= TOMOFS_MAXINODES) {
+		goto release;
+	}
+	for (i = 1; i < TOMOFS_MAXINODES; i++) {
+		if ((inodes[i].flags & 0x1) == 0) {
+			tsb->inode_count++;
+			inodes[i].flags |= 0x1;
+			next_ino = inodes[i].i_ino;
+			break;
+		}
+	}
+
+	mark_buffer_dirty(bh);
+	sync_dirty_buffer(bh);
+
+release:
+	brelse(bh);
+	return next_ino;
+}
+
+/* Nobody assures that the inode being written to is not in use */
+static int tomofs_save_inode(struct super_block *sb,
+    struct tomofs_inode *t_inode)
+{
+	struct tomofs_super_block *tsb;
+	struct buffer_head *bh;
+	struct tomofs_inode *inodes;
+
+	tsb = (struct tomofs_super_block *)sb->s_fs_info;
+	bh = __bread(sb->s_bdev, tsb->inodes >> sb->s_blocksize_bits,
+	    TOMOFS_BLK_SIZE);
+	inodes = (struct tomofs_inode *)bh->b_data;
+	memcpy(inodes + t_inode->i_ino, t_inode,
+	    sizeof(struct tomofs_inode));
+
+	mark_buffer_dirty(bh);
+	sync_dirty_buffer(bh);
+
+	return 0;
+}
+
+static int tomofs_create_inode(struct inode *parent, struct dentry *dentry,
     umode_t mode)
 {
+	struct inode *inode;
+	struct tomofs_inode *t_inode = NULL;
+	struct super_block *sb;
+	uint64_t next_ino = 0;
+	struct block_extent inode_block;
+
+	sb = parent->i_sb;
+	next_ino = tomofs_allocate_next_inode(sb);
+	if (!t_inode) {
+		return -ENOSPC;
+	}
+
+	t_inode = kmem_cache_alloc(tomofs_inode_cachep, GFP_KERNEL);
+
+	if (!t_inode) {
+		return -ENOMEM;
+	}
+
+	t_inode->i_atime = current_time(inode);
+	t_inode->i_ctime = current_time(inode);
+	t_inode->i_mtime = current_time(inode);
+
+	inode = new_inode(sb);
+	inode->i_sb = sb;
+	inode->i_op = parent->i_op;
+
+	inode->i_private = t_inode;
+	inode->i_ino = t_inode->i_ino;
+	inode->i_atime = t_inode->i_atime;
+	inode->i_ctime = t_inode->i_ctime;
+	inode->i_mtime = t_inode->i_mtime;
+	t_inode->mode = mode;
+
+	if (S_ISDIR(mode)) {
+		
+	}
+
+	get_empty_block(sb, 1, &inode_block);
+	t_inode->inode_block_ptr = inode_block.head;
+
+	tomofs_save_inode(sb, t_inode);
 	return 0;
 }
 
 static int tomofs_create(struct inode *parent, struct dentry *dentry,
     umode_t mode, bool excl)
 {
-	return tomofs_create_fs_obj(parent, dentry, mode);
+	return tomofs_create_inode(parent, dentry, mode);
 }
 
 static int tomofs_mkdir(struct inode *parent, struct dentry *dentry,
     umode_t mode)
 {
-	return tomofs_create_fs_obj(parent, dentry, S_IFDIR | mode);
+	return tomofs_create_inode(parent, dentry, S_IFDIR | mode);
 }
 
 ssize_t tomofs_read(struct file *f, char __user *buf, size_t len,

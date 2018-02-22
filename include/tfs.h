@@ -8,6 +8,7 @@
 #define TOMOFS_SB_MAGIC 0xdeadbeef
 #define TOMOFS_ROOTDIR_INODE_NO 1
 #define TOMOFS_BLK_SIZE (1 << 12) /* (== 4KiB; PAGE_SIZE on x86_64) */
+#define TOMOFS_MAX_FILENAME_LEN 64
 
 /* TODO: Limit this if we only allow direct blocks */
 static const loff_t TOMOFS_MAXBYTES = 1 << 63;
@@ -23,7 +24,7 @@ struct block_extent {
 };
 
 struct block_dev {
-	struct block_extent *block_map;
+	uintptr_t block_map;
 	uint64_t block_cnt;
 };
 
@@ -31,6 +32,7 @@ struct tomofs_inode {
 	int flags;
 	mode_t mode;
 	unsigned long i_ino;
+	uintptr_t inode_block_ptr;
 	struct timespec i_atime;
 	struct timespec i_mtime;
 	struct timespec i_ctime;
@@ -44,14 +46,18 @@ struct tomofs_inode {
  */
 #define TOMOFS_MAXINODES (TOMOFS_BLK_SIZE / sizeof(struct tomofs_inode))
 
+struct tomofs_directory_record {
+	char filename[64];
+	unsigned long i_ino;
+};
+
+#define TOMOFS_DIR_MAXINODES \
+    (TOMOFS_BLK_SIZE / sizeof(struct tomofs_directory_record)
+
 struct tomofs_super_block {
 	int magic;
 	struct block_dev dev;
-	int next_open_inode;
-	/*
-         * TODO: Move to inode table.
-	 * Having this in the super block is BROKEN!
-	 */
+	uint64_t inode_count;
 	uintptr_t inodes;
 };
 

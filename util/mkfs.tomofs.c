@@ -25,11 +25,11 @@ int main(int argc, char **argv)
 	}
 	struct tomofs_super_block tsb = {
 		.magic = 0xdeadbeef,
-		.next_open_inode = 1,
+		.inode_count = 1,
 		.inodes = TOMOFS_INODES,
 	};
 
-	tsb.dev.block_map = (struct block_extent *)TOMOFS_BLOCK_MAP;
+	tsb.dev.block_map = TOMOFS_BLOCK_MAP;
 	/* TODO: Calculate this */
 	tsb.dev.block_cnt = 0xfffffff;
 
