@@ -11,7 +11,7 @@
 #define TOMOFS_MAX_FILENAME_LEN 64
 
 /* TODO: Limit this if we only allow direct blocks */
-static const loff_t TOMOFS_MAXBYTES = 1 << 63;
+static const loff_t TOMOFS_MAXBYTES = TOMOFS_BLK_SIZE;
 
 enum tomofs_obj_type {
 	TOMOFS_INODE,
@@ -44,7 +44,7 @@ struct tomofs_inode {
 	union {
 		uint64_t file_size;
 		uint64_t child_count;
-	}
+	};
 };
 
 /*
@@ -61,7 +61,7 @@ struct tomofs_directory_record {
 };
 
 #define TOMOFS_DIR_MAXINODES \
-    (TOMOFS_BLK_SIZE / sizeof(struct tomofs_directory_record)
+    (TOMOFS_BLK_SIZE / sizeof(struct tomofs_directory_record))
 
 struct tomofs_super_block {
 	int magic;
@@ -80,5 +80,14 @@ struct tomofs_super_block {
   */
 struct block_extent *get_empty_block(struct super_block *sb,
     uint64_t cnt, struct block_extent *found);
+
+/*
+  * Get empty block
+  * @sb: super block
+  * @e: block_extent zero fill
+  *
+  * TODO: Document
+  */
+int zero_block(struct super_block *sb, struct block_extent *e);
 
 #endif /* #define _TFS_H_ */
