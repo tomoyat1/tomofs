@@ -606,4 +606,4 @@ static void tomofs_kill_superblock(struct super_block *sb)
 module_init(init_tomofs_fs)
 module_exit(exit_tomofs_fs)
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("BSD");
